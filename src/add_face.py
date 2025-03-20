@@ -34,6 +34,7 @@ class AddFaceScreen(Screen):
     extracts embeddings for each face, then saves the averaged
     embedding and the best image to the database.
     """
+    current_camera = 0  # 0: rear camera, 1: front camera
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -46,13 +47,6 @@ class AddFaceScreen(Screen):
         self.captured_features = []  # face embedding list
         self.captured_images = []  # face image list
         self.capture_count = 0  # how many images we captured
-
-        # Basic UI setup
-        self.layout = BoxLayout(orientation="vertical")
-        self.image = Image()
-        self.layout.add_widget(self.image)
-        self.add_widget(self.layout)
-        # self.current_camera=1
 
         # Capture state
         self.is_capturing = False
@@ -70,7 +64,7 @@ class AddFaceScreen(Screen):
         self.ids.progress_bar.value = 0
         self.last_speech_time = 0  
 
-        Clock.schedule_interval(self.update_frame, 1.0 / 60) 
+        Clock.schedule_interval(self.update_frame, 1.0 / 30) 
         Clock.schedule_interval(self.capture_face, 0.2)
 
     def on_leave(self, *args):
@@ -79,7 +73,7 @@ class AddFaceScreen(Screen):
 
     def start_camera(self):
         """Open the camera and schedule frame updates."""
-        self.capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        self.capture = cv2.VideoCapture(self.current_camera)
         self.capture_count = 0
         self.captured_features = []
         self.captured_images = []
@@ -108,13 +102,14 @@ class AddFaceScreen(Screen):
         buf = cv2.flip(frame, 0).tobytes()
         texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt='bgr')
         texture.blit_buffer(buf, colorfmt='bgr', bufferfmt='ubyte')
-        self.image.texture = texture
+        self.ids.camera_feed.texture = texture
 
     def capture_face(self, dt=None):
         """
         Automatically capture faces.
         Once we have enough captures (20), we process them.
         """
+
         if self.capture_count >= 20:
             self.is_capturing = False
 
@@ -123,9 +118,15 @@ class AddFaceScreen(Screen):
             self.process_captured_faces()
             return
         
+        ret, frame = self.capture.read()
+        if not ret:
+            return
+        
+        
         frame = getattr(self, 'current_frame', None)
 
         faces = self.image_manager.detect_faces(frame)
+        
         if faces:
             x1, y1, x2, y2 = faces[0]
             face_img = frame[y1:y2, x1:x2]

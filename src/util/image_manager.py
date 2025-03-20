@@ -1,6 +1,19 @@
 import cv2
 import numpy as np
-import tflite_runtime.interpreter as tflite
+import sys
+
+try:
+    # Try importing the lightweight TFLite runtime first
+    from tflite_runtime.interpreter import Interpreter
+    # print("Using tflite-runtime")
+except ImportError:
+    try:
+        # If tflite-runtime is not available, fallback to full TensorFlow
+        from tensorflow.lite.python.interpreter import Interpreter
+        # print("Using full TensorFlow")
+    except ImportError:
+        raise ImportError("Neither tflite-runtime nor TensorFlow is installed. Please install one.")
+
 
 class ImageManager():
     def __init__(self, **kwargs):
@@ -9,13 +22,13 @@ class ImageManager():
         self.init_detect_model()
 
     def init_face_model(self):
-        self.face_model = tflite.Interpreter(model_path="models/mobilefacenet.tflite")
+        self.face_model = Interpreter(model_path="models/mobilefacenet.tflite")
         self.face_model.allocate_tensors()
         self.input_details = self.face_model.get_input_details()
         self.output_details = self.face_model.get_output_details()
 
     def init_detect_model(self):
-        self.detect_model = tflite.Interpreter(model_path="models/face_detection.tflite")
+        self.detect_model = Interpreter(model_path="models/face_detection.tflite")
         self.detect_model.allocate_tensors()
         self.detect_input_details = self.detect_model.get_input_details()
         self.detect_output_details = self.detect_model.get_output_details()

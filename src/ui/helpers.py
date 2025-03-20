@@ -225,6 +225,12 @@ ScreenManager:
             height: dp(300)
             padding: dp(20)
 
+        Image:
+            id: camera_feed
+            allow_stretch: True
+            keep_ratio: True 
+            size_hint: 1, 1 
+
         Widget: 
 
         MDProgressBar:

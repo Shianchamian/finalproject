@@ -79,7 +79,6 @@ class RecognitionScreen(Screen):
         
         self.ids.recognition_label.text = f"{detected_name} ({confidence_score:.2f}%)"
 
-        # OpenCV 转 Kivy 纹理
         buf = cv2.flip(frame, 0).tobytes()
         texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt='bgr')
         texture.blit_buffer(buf, colorfmt='bgr', bufferfmt='ubyte')
