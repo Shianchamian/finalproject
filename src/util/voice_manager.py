@@ -2,13 +2,20 @@
 Manages text-to-speech functionality using pyttsx3,
 providing simple methods to speak various messages in the background.
 """
-
-from threading import Thread
-import time
-import pyttsx3
 import logging
 logging.getLogger("comtypes").setLevel(logging.ERROR)
+from threading import Thread
 
+import platform
+
+AndroidTTS = None 
+if platform.system() == "Linux":
+    try:
+        from jnius import autoclass
+        AndroidTTS = autoclass('android.speech.tts.TextToSpeech')
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+    except ImportError:
+        AndroidTTS = None
 
 class VoiceManager:
     """
@@ -17,9 +24,15 @@ class VoiceManager:
     """
     def __init__(self):
         self.is_speaking = False
-        self.tts = pyttsx3.init()
-        self.tts.setProperty('rate', 150)
-        self.tts.setProperty('volume', 1.5)
+        self.tts = None
+
+        if platform.system() == "Linux" and AndroidTTS:
+            self.tts = AndroidTTS(PythonActivity.mActivity, None)
+        else:
+            import pyttsx3
+            self.tts = pyttsx3.init()
+            self.tts.setProperty('rate', 150)
+            self.tts.setProperty('volume', 1.0)
 
     def speak(self, text):
         """
@@ -28,8 +41,11 @@ class VoiceManager:
         """
         def run():
             self.is_speaking = True
-            self.tts.say(text)
-            self.tts.runAndWait()
+            if AndroidTTS and platform.system() == "Linux":
+                self.tts.speak(text, AndroidTTS.QUEUE_FLUSH, None)
+            else:
+                self.tts.say(text)
+                self.tts.runAndWait()
             self.is_speaking = False
         
         if not self.is_speaking:

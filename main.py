@@ -2,6 +2,8 @@
 This is the main entry point of the app. It initializes the
 ScreenManager, handles navigation, and sets up the face analysis model.
 """
+import logging
+logging.getLogger("tensorflow").setLevel(logging.ERROR)
 import numpy as np
 import cv2
 
