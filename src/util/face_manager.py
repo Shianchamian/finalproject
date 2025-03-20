@@ -7,6 +7,7 @@ import sqlite3
 import numpy as np
 import os
 import time
+import shutil
 
 DB_PATH = "database.db"
 
@@ -156,6 +157,11 @@ def clear_recognition_history():
     cursor.execute("DELETE FROM recognitions")
     conn.commit()
     conn.close()
+    
+    # delete captured pictures
+    folder_path = "captured_face"
+    if os.path.exists(folder_path):
+        shutil.rmtree(folder_path)
 
 
 def print_table_faces():
