@@ -58,25 +58,22 @@ class AddFaceScreen(Screen):
 
     def on_enter(self, *args):
         """Start capturing and reset the progress bar when this screen is displayed."""
-        self.start_camera()
         self.is_capturing = True
-
         self.ids.progress_bar.value = 0
-        self.last_speech_time = 0  
+        self.last_speech_time = 0 
+        self.capture_count = 0
+        self.captured_features = []
+        self.captured_images = [] 
 
+        self.capture = cv2.VideoCapture(self.current_camera)
         Clock.schedule_interval(self.update_frame, 1.0 / 30) 
         Clock.schedule_interval(self.capture_face, 0.2)
+
+        self.capture_face()
 
     def on_leave(self, *args):
         """Stop the camera when exiting this screen."""
         self.stop_camera()
-
-    def start_camera(self):
-        """Open the camera and schedule frame updates."""
-        self.capture = cv2.VideoCapture(self.current_camera)
-        self.capture_count = 0
-        self.captured_features = []
-        self.captured_images = []
 
     def stop_camera(self):
         """Release camera resources."""
@@ -95,8 +92,7 @@ class AddFaceScreen(Screen):
         if not ret:
             return
         
-        self.current_frame = frame.copy()
-      
+        # self.current_frame = frame.copy()
 
         # Convert to Kivy texture
         buf = cv2.flip(frame, 0).tobytes()
@@ -105,57 +101,47 @@ class AddFaceScreen(Screen):
         self.ids.camera_feed.texture = texture
 
     def capture_face(self, dt=None):
-        """
-        Automatically capture faces.
-        Once we have enough captures (20), we process them.
-        """
 
         if self.capture_count >= 20:
             self.is_capturing = False
-
             Clock.unschedule(self.capture_face)
-
             self.process_captured_faces()
             return
         
         ret, frame = self.capture.read()
         if not ret:
             return
-        
-        
-        frame = getattr(self, 'current_frame', None)
 
         faces = self.image_manager.detect_faces(frame)
-        
+        current_time = time.time()
+
+        progress = (self.capture_count / 20) * 100
+        self.ids.progress_bar.value = progress # Update the progress bar value
+
         if faces:
             x1, y1, x2, y2 = faces[0]
             face_img = frame[y1:y2, x1:x2]
+            embedding = self.image_manager.extract_features(face_img)
 
-            embedding = self.image_manager.extract_features(face_img) 
+            instruction = "please look at the camera"
 
-            # Update progress bar
-            progress = (self.capture_count /20) * 100
-            self.ids.progress_bar.value = progress
-
-            # Avoid capturing very similar embeddings repeatedly
             if self.is_duplicate_embedding(embedding, 0.8):
-                current_time = time.time()
-                if progress < 50:
-                    instruction = "Slowly turn your head left and right."
-                else:
-                    instruction = "Gently nod your head up and down."
-
+                instruction = "Slowly turn your head left and right." if self.capture_count < 10 else "Gently nod your head up and down."
                 self.ids.label.text = instruction
-                # Avoid speech spamming by limiting how often we speak
-                if current_time - self.last_speech_time > 10:
-                    self.voice_manager.speak(instruction)
-                    self.last_speech_time = current_time
+
             else:
                 self.captured_features.append(embedding)
                 self.captured_images.append(frame)
                 self.capture_count += 1
-        else:
-            self.voice_manager.no_face_detected()
+
+        if current_time - self.last_speech_time > 8:
+            if faces:
+                self.voice_manager.speak(instruction)
+            else:
+                self.voice_manager.no_face_detected()
+
+            self.last_speech_time = current_time  
+
 
 
     def is_duplicate_embedding(self, new_embedding, threshold):
@@ -174,10 +160,8 @@ class AddFaceScreen(Screen):
         """Compute average features and save the best image."""
         avg_features = np.mean(self.captured_features, axis=0).astype(np.float32)
 
-        # Pick the sharpest image as 'best'
-        best_index = self.select_best_image(self.captured_images)
-        best_image = self.captured_images[best_index]
-        image_path = self.save_face_image(best_image)
+        first_face_frame = self.captured_images[0]  # 直接取第一张
+        image_path = self.save_face_image(first_face_frame)  # **保存裁剪后的人脸**
 
         # Insert into database
         name = self.face_info["name"]
@@ -189,16 +173,25 @@ class AddFaceScreen(Screen):
         app.root.current = "success"
         self.voice_manager.speak("Well done, this face is successfully added to the database.")
 
-    def select_best_image(self, images):
-        """Choose the sharpest image by measuring Laplacian variance."""
-        def sharpness(img):
-            return cv2.Laplacian(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var()
 
-        scores = [sharpness(img) for img in images]
-        return np.argmax(scores)
+    # def save_face_image(self, image):
+    #     """Save a cropped face image (if detected) or the full image."""
+    #     if not os.path.exists("assets"):
+    #         os.makedirs("assets")
 
-    def save_face_image(self, image):
-        """Save a cropped face image (if detected) or the full image."""
+    #     existing_files = len(os.listdir("assets"))
+    #     new_id = existing_files + 1
+    #     save_path = f"assets/face_{new_id}.png"
+
+    #     face_image = image  # If no face detected, fallback to the original frame
+
+    #     cv2.imwrite(save_path, face_image)
+    #     return save_path
+
+
+    def save_face_image(self, frame):
+        """Save the first detected face, or fallback to the full image."""
+        
         if not os.path.exists("assets"):
             os.makedirs("assets")
 
@@ -206,10 +199,32 @@ class AddFaceScreen(Screen):
         new_id = existing_files + 1
         save_path = f"assets/face_{new_id}.png"
 
-        face_image = image  # If no face detected, fallback to the original frame
+        detected_faces = self.image_manager.detect_faces(frame)
+        print(f"Detected faces: {detected_faces}") 
 
+        if detected_faces:
+            x1, y1, x2, y2 = detected_faces[0]  
+            
+            h, w, _ = frame.shape
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
+
+            print(f"Corrected face coordinates: {x1}, {y1}, {x2}, {y2}") 
+            
+            if x2 > x1 and y2 > y1:
+                face_image = frame[y1:y2, x1:x2] 
+            else:
+                print("Warning: Invalid face coordinates, saving full frame instead.")
+                face_image = frame 
+        else:
+            print("No face detected, saving full frame!") 
+            face_image = frame  
         cv2.imwrite(save_path, face_image)
+        print(f"Face saved at: {save_path}")
+        
         return save_path
+
+
 
     def exit_screen(self):
         """Stop camera and go back to main screen."""
