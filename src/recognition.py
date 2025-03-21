@@ -17,6 +17,7 @@ from functools import partial
 from src.util.face_manager import get_face, save_recognition
 from src.util.voice_manager import VoiceManager
 from src.util.image_manager import ImageManager
+import threading
 
 
 
@@ -52,38 +53,38 @@ class RecognitionScreen(Screen):
         Clock.schedule_interval(self.update_frame, 1.0 / 30)
 
 
-
     def update_frame(self, dt):
         ret, frame = self.capture.read()
         if not ret:
             return
-        
-        detected_name = "?"
-        confidence_score = 0.0
 
-        self.frame_counter += 1
-
-        if self.frame_counter % 10 == 0:
-            new_faces = self.image_manager.detect_faces(frame)
-
-            if new_faces:
-                self.last_faces = new_faces
-            else:
-                self.last_faces = []
-
-        for (x1, y1, x2, y2) in self.last_faces:
-            face_img = frame[y1:y2, x1:x2]
-
-            new_face = self.image_manager.extract_features(face_img)
-            detected_name, confidence_score, relationship = self.find_best_match(new_face)
-        
-        self.ids.recognition_label.text = f"{detected_name} ({confidence_score:.2f}%)"
+        if self.frame_counter % 15 == 0:
+            threading.Thread(target=self.process_face, args=(frame,)).start()
 
         buf = cv2.flip(frame, 0).tobytes()
         texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt='bgr')
         texture.blit_buffer(buf, colorfmt='bgr', bufferfmt='ubyte')
-        self.ids.camera_feed.texture = texture
+        self.ids.camera_feed.texture = texture  
 
+        self.frame_counter += 1
+
+    def process_face(self, frame):
+        """Detect and recognize faces in the given frame."""
+        new_faces = self.image_manager.detect_faces(frame)
+
+        if new_faces and new_faces != self.last_faces:
+            self.last_faces = new_faces
+            x1, y1, x2, y2 = new_faces[0]
+            face_img = frame[y1:y2, x1:x2]
+
+            new_face = self.image_manager.extract_features(face_img)
+            detected_name, confidence_score, relationship = self.find_best_match(new_face)
+
+            # update ui
+            def update_label(*args):
+                self.ids.recognition_label.text = f"{detected_name} ({confidence_score:.2f}%)"
+
+            Clock.schedule_once(update_label)
 
 
 
