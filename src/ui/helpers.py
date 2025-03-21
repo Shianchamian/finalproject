@@ -219,11 +219,6 @@ ScreenManager:
         # MDIconButton:
         #     icon: 'camera-party-mode'
         #     on_release:  app.switch_camera()
-            
-        BoxLayout:
-            id: label
-            height: dp(300)
-            padding: dp(20)
 
         Image:
             id: camera_feed
@@ -231,7 +226,12 @@ ScreenManager:
             keep_ratio: True 
             size_hint: 1, 1 
 
-        Widget: 
+        MDLabel:
+            id: label
+            text: "Face not visible.Please move closer to the camera"
+            font_size: "20sp"
+            halign: "center"
+            pos_hint: {"center_x": 0.5, "center_y": 0.5}
 
         MDProgressBar:
             id: progress_bar
